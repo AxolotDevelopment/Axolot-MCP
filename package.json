@@ -1,12 +1,14 @@
 {
-  "name": "@axolot/cms-mcp-server",
-  "version": "0.1.0",
-  "private": true,
+  "name": "@axolot-ai/mcp-server",
+  "version": "0.0.1",
   "type": "module",
   "description": "MCP server exposing AxolotCMS tools to AI designers",
   "bin": {
     "axolot-mcp": "./dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
