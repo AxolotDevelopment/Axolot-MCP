@@ -36,7 +36,7 @@ Once the server is running, use the following tools in your AI chat:
 
 ## Documentation
 
-Full documentation available at [axolot-cms.com/docs/mcp](https://axolot-cms.com/docs/mcp).
+Full documentation available at [axolotcms.com/docs/mcp](https://axolotcms.com/docs/mcp).
 
 ## License
 
