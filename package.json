@@ -1,6 +1,7 @@
 {
   "name": "@axolot-ai/mcp-server",
-  "version": "0.0.3",
+  "version": "0.0.4",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/AxolotDevelopment/Axolot-MCP.git"
