@@ -67,16 +67,14 @@ Once connected, the AI will automatically invoke the following tools to fulfill 
 *   `setDesignTokens`: Updates brand tokens in the database to establish brand styling.
 *   `getSiteSettings`: Fetches core business information (address, social links, email).
 
-### 📝 Layouts & Visual Slots
-*   `getPages`: Lists all pages and their corresponding registered editable content slots.
+### 📝 Layouts & Visual Slots (Consolidated)
+*   `managePage`: High-efficiency consolidated tool to list, get, create, update, or delete pages and their schemas.
 *   `getSlots`: Reads details and values of slots on a specific page.
 *   `createSlot`: Registers a new editable slot key (e.g. `home.hero.title`) in the database.
-*   `createPage`: Generates a new page slug in the CMS structure.
 
-### 🛍️ Modules (Blog & Shop)
-*   `getBlogPosts` / `getBlogPost`: Queries post lists, drafts, and categories.
-*   `createBlogPost` / `updateBlogPost`: Creates and updates articles.
-*   `getProducts` / `getProduct` / `createProduct`: Manages product catalogs and attributes.
+### 🛍️ Modules & Assets (Consolidated)
+*   `manageBlogPost`: Consolidated tool to perform CRUD actions on blog posts (list, get, create, update, or delete).
+*   `manageProduct`: Consolidated tool to perform CRUD actions on shop products (list, get, create, update, or delete).
 *   `getMedia`: Lists media library files with WebP URLs and alt text descriptions.
 
 ---

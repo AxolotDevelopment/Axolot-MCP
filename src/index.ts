@@ -278,24 +278,59 @@ server.tool(
 )
 
 /**
- * Get all pages and their slot structure
+ * Manage pages in the CMS
  */
 server.tool(
-  'getPages',
-  'Get all pages for the site and their editable slots. Use this to understand the current site structure before adding new sections.',
-  {},
-  async () => {
+  'managePage',
+  'Manage pages in the CMS (list, get, create, update, or delete). Slug must start with a slash (e.g. /about).',
+  {
+    action: z.enum(['list', 'get', 'create', 'update', 'delete']).describe('The action to perform'),
+    pageId: z.string().optional().describe('The UUID of the page (required for get, update, delete)'),
+    title: z.string().optional().describe('Title of the page (required for create)'),
+    slug: z.string().optional().describe('URL slug of the page, e.g. "/about" (required for create)'),
+    metaTitle: z.string().optional().describe('SEO meta title'),
+    metaDescription: z.string().optional().describe('SEO meta description'),
+    isPublished: z.boolean().optional().describe('Publish status (for update)'),
+  },
+  async ({ action, pageId, title, slug, metaTitle, metaDescription, isPublished }) => {
     const siteId = getSiteId()
     if (!siteId) throw new Error('No active site. Use cms_switch_site to select one.')
 
-    const pages = await api<Array<{ id: string; title: string; slug: string; slots: unknown[] }>>(
-      `/api/v1/sites/${siteId}/pages`
-    )
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(pages, null, 2),
-      }],
+    switch (action) {
+      case 'list': {
+        const pages = await api<any[]>(`/api/v1/sites/${siteId}/pages`)
+        return { content: [{ type: 'text', text: JSON.stringify(pages, null, 2) }] }
+      }
+      case 'get': {
+        if (!pageId) throw new Error('pageId is required for get action')
+        const page = await api<any>(`/api/v1/sites/${siteId}/pages/${pageId}`)
+        return { content: [{ type: 'text', text: JSON.stringify(page, null, 2) }] }
+      }
+      case 'create': {
+        if (!title || !slug) throw new Error('title and slug are required for create action')
+        const page = await api<any>(`/api/v1/sites/${siteId}/pages`, {
+          method: 'POST',
+          body: JSON.stringify({ title, slug, metaTitle, metaDescription }),
+        })
+        return { content: [{ type: 'text', text: `✅ Page created: ${title} (${page.id})` }] }
+      }
+      case 'update': {
+        if (!pageId) throw new Error('pageId is required for update action')
+        const page = await api<any>(`/api/v1/sites/${siteId}/pages/${pageId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ title, slug, metaTitle, metaDescription, isPublished }),
+        })
+        return { content: [{ type: 'text', text: `✅ Page updated: ${page.title || pageId}` }] }
+      }
+      case 'delete': {
+        if (!pageId) throw new Error('pageId is required for delete action')
+        await api(`/api/v1/sites/${siteId}/pages/${pageId}`, {
+          method: 'DELETE',
+        })
+        return { content: [{ type: 'text', text: `✅ Page deleted successfully (ID: ${pageId})` }] }
+      }
+      default:
+        throw new Error(`Unsupported action: ${action}`)
     }
   }
 )
@@ -512,229 +547,147 @@ server.tool(
 
 /**
  * Get all blog posts
+/**
+ * Manage blog posts in the CMS
  */
 server.tool(
-  'getBlogPosts',
-  'List all blog posts for the site. Use this to build blog index pages or latest post widgets.',
+  'manageBlogPost',
+  'Manage blog posts in the CMS (list, get, create, update, or delete).',
   {
-    status: z.enum(['draft', 'published', 'archived']).optional().describe('Filter by status'),
+    action: z.enum(['list', 'get', 'create', 'update', 'delete']).describe('The action to perform'),
+    postId: z.string().optional().describe('The UUID of the post (required for get, update, delete)'),
+    slug: z.string().optional().describe('The slug of the post (can be used for get)'),
+    title: z.string().optional().describe('The post title (for create/update)'),
+    excerpt: z.string().optional().describe('A short summary (for create/update)'),
+    content: z.string().optional().describe('The full content HTML/Markdown (for create/update)'),
+    featuredImage: z.string().optional().describe('URL of the featured image (for create/update)'),
+    status: z.enum(['draft', 'published', 'archived']).optional().describe('Status (for create/update)'),
+    categoryId: z.string().optional().describe('Category UUID (for create/update)'),
   },
-  async ({ status }) => {
+  async ({ action, postId, slug, title, excerpt, content, featuredImage, status, categoryId }) => {
     const siteId = getSiteId()
     if (!siteId) throw new Error('No active site. Use cms_switch_site to select one.')
 
+    // Check module status
     const site = await api<{ activeModules: Array<{ module: { name: string } }> }>(`/api/v1/sites/${siteId}`)
     const isBlogActive = (site.activeModules ?? []).some(m => m.module.name === 'blog')
-
     if (!isBlogActive) {
-      return {
-        content: [{
-          type: 'text',
-          text: '❌ ERROR: El módulo de "Blog" no está activo para este sitio.',
-        }],
-        isError: true,
+      throw new Error('❌ ERROR: El módulo de "Blog" no está activo para este sitio.')
+    }
+
+    switch (action) {
+      case 'list': {
+        const posts = await api<any[]>(`/api/v1/blog/${siteId}/posts`)
+        const filteredPosts = status ? posts.filter(p => p.status === status) : posts
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(filteredPosts.map(p => ({
+              id: p.id,
+              title: p.title,
+              slug: p.slug,
+              status: p.status,
+              date: p.publishedAt || p.createdAt,
+              image: p.featuredImage
+            })), null, 2),
+          }],
+        }
       }
-    }
-
-    const posts = await api<any[]>(`/api/v1/blog/${siteId}/posts`)
-    const filteredPosts = status ? posts.filter(p => p.status === status) : posts
-
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(filteredPosts.map(p => ({
-          id: p.id,
-          title: p.title,
-          slug: p.slug,
-          status: p.status,
-          date: p.publishedAt || p.createdAt,
-          image: p.featuredImage
-        })), null, 2),
-      }],
-    }
-  }
-)
-
-/**
- * Get a specific blog post
- */
-server.tool(
-  'getBlogPost',
-  'Get the full content and details of a specific blog post.',
-  {
-    postId: z.string().optional().describe('The post ID'),
-    slug: z.string().optional().describe('The post slug'),
-  },
-  async ({ postId, slug }) => {
-    const siteId = getSiteId()
-    if (!siteId) throw new Error('No active site. Use cms_switch_site to select one.')
-
-    const site = await api<{ activeModules: Array<{ module: { name: string } }> }>(`/api/v1/sites/${siteId}`)
-    const isBlogActive = (site.activeModules ?? []).some(m => m.module.name === 'blog')
-
-    if (!isBlogActive) {
-      return {
-        content: [{ type: 'text', text: '❌ ERROR: El módulo de "Blog" no está activo.' }],
-        isError: true,
+      case 'get': {
+        const posts = await api<any[]>(`/api/v1/blog/${siteId}/posts`)
+        const post = postId ? posts.find(p => p.id === postId) : posts.find(p => p.slug === slug)
+        if (!post) throw new Error(`Post not found`)
+        return { content: [{ type: 'text', text: JSON.stringify(post, null, 2) }] }
       }
-    }
-
-    const posts = await api<any[]>(`/api/v1/blog/${siteId}/posts`)
-    const post = postId 
-      ? posts.find(p => p.id === postId) 
-      : posts.find(p => p.slug === slug)
-
-    if (!post) {
-      return { content: [{ type: 'text', text: `❌ Post not found` }], isError: true }
-    }
-
-    return { content: [{ type: 'text', text: JSON.stringify(post, null, 2) }] }
-  }
-)
-
-/**
- * Create a new blog post
- */
-server.tool(
-  'createBlogPost',
-  'Create a new blog post in the CMS.',
-  {
-    title: z.string().describe('The post title'),
-    slug: z.string().describe('The post slug'),
-    excerpt: z.string().optional().describe('A short summary of the post'),
-    content: z.string().describe('The full content (HTML or Markdown)'),
-    featuredImage: z.string().optional().describe('URL of the featured image'),
-    status: z.enum(['draft', 'published', 'archived']).default('published'),
-    categoryId: z.string().optional().describe('UUID of the category'),
-  },
-  async (data) => {
-    const siteId = getSiteId()
-    if (!siteId) throw new Error('No active site. Use cms_switch_site to select one.')
-
-    const post = await api(`/api/v1/blog/${siteId}/posts`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    })
-
-    return {
-      content: [{
-        type: 'text',
-        text: `✅ Blog post created: ${data.title}\nURL: /blog/${data.slug}`,
-      }],
+      case 'create': {
+        if (!title || !slug || !content) throw new Error('title, slug, and content are required for create action')
+        const post = await api<any>(`/api/v1/blog/${siteId}/posts`, {
+          method: 'POST',
+          body: JSON.stringify({ title, slug, excerpt, content, featuredImage, status: status || 'published', categoryId }),
+        })
+        return { content: [{ type: 'text', text: `✅ Blog post created: ${title}\nURL: /blog/${slug} (${post.id})` }] }
+      }
+      case 'update': {
+        if (!postId) throw new Error('postId is required for update action')
+        const post = await api<any>(`/api/v1/blog/${siteId}/posts/${postId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ title, slug, excerpt, content, featuredImage, status, categoryId }),
+        })
+        return { content: [{ type: 'text', text: `✅ Blog post updated (ID: ${postId})` }] }
+      }
+      case 'delete': {
+        if (!postId) throw new Error('postId is required for delete action')
+        await api(`/api/v1/blog/${siteId}/posts/${postId}`, {
+          method: 'DELETE',
+        })
+        return { content: [{ type: 'text', text: `✅ Blog post deleted (ID: ${postId})` }] }
+      }
+      default:
+        throw new Error(`Unsupported action: ${action}`)
     }
   }
 )
 
 /**
- * Update an existing blog post
+ * Manage shop products in the CMS
  */
 server.tool(
-  'updateBlogPost',
-  'Update an existing blog post.',
+  'manageProduct',
+  'Manage shop products (escapadas) in the CMS (list, get, create, update, or delete).',
   {
-    postId: z.string().describe('The UUID of the post to update'),
-    title: z.string().optional(),
-    slug: z.string().optional(),
-    excerpt: z.string().optional(),
-    content: z.string().optional(),
-    featuredImage: z.string().optional(),
-    status: z.enum(['draft', 'published', 'archived']).optional(),
-    categoryId: z.string().optional(),
+    action: z.enum(['list', 'get', 'create', 'update', 'delete']).describe('The action to perform'),
+    productId: z.string().optional().describe('The UUID of the product (required for update, delete)'),
+    slug: z.string().optional().describe('The slug of the product (required for get, optional for create/update)'),
+    name: z.string().optional().describe('Name of the product (required for create)'),
+    description: z.string().optional().describe('Full description'),
+    shortDescription: z.string().optional().describe('Short summary description'),
+    price: z.number().optional().describe('Price in cents/base units (required for create)'),
+    featuredImage: z.string().optional().describe('URL of featured image'),
+    status: z.enum(['draft', 'published']).optional().describe('Status (for create/update)'),
   },
-  async ({ postId, ...data }) => {
+  async ({ action, productId, slug, name, description, shortDescription, price, featuredImage, status }) => {
     const siteId = getSiteId()
-    if (!siteId) throw new Error('No active site. Use cms_switch_site to select one.')
+    if (!siteId) throw new Error('No active site.')
 
-    await api(`/api/v1/blog/${siteId}/posts/${postId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    })
-
-    return {
-      content: [{ type: 'text', text: `✅ Blog post updated (ID: ${postId})` }],
+    switch (action) {
+      case 'list': {
+        const products = await api<any[]>(`/api/v1/shop/${siteId}/products`)
+        const filtered = status ? products.filter(p => p.status === status) : products
+        return { content: [{ type: 'text', text: JSON.stringify(filtered, null, 2) }] }
+      }
+      case 'get': {
+        if (!slug) throw new Error('slug is required for get action')
+        const product = await api<any>(`/api/v1/shop/${siteId}/products/slug/${slug}`)
+        return { content: [{ type: 'text', text: JSON.stringify(product, null, 2) }] }
+      }
+      case 'create': {
+        if (!name || !slug || price === undefined) {
+          throw new Error('name, slug, and price are required for create action')
+        }
+        const product = await api<any>(`/api/v1/shop/${siteId}/products`, {
+          method: 'POST',
+          body: JSON.stringify({ name, slug, description: description || '', shortDescription: shortDescription || '', price, featuredImage, status: status || 'published' }),
+        })
+        return { content: [{ type: 'text', text: `✅ Product created: ${name} (${product.id})` }] }
+      }
+      case 'update': {
+        if (!productId) throw new Error('productId is required for update action')
+        const product = await api<any>(`/api/v1/shop/${siteId}/products/${productId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ name, slug, description, shortDescription, price, featuredImage, status }),
+        })
+        return { content: [{ type: 'text', text: `✅ Product updated: ${product.name || productId}` }] }
+      }
+      case 'delete': {
+        if (!productId) throw new Error('productId is required for delete action')
+        await api(`/api/v1/shop/${siteId}/products/${productId}`, {
+          method: 'DELETE',
+        })
+        return { content: [{ type: 'text', text: `✅ Product deleted (ID: ${productId})` }] }
+      }
+      default:
+        throw new Error(`Unsupported action: ${action}`)
     }
-  }
-)
-
-/**
- * Get all shop products
- */
-server.tool(
-  'getProducts',
-  'List all products (escapadas) for the site.',
-  { status: z.enum(['draft', 'published', 'archived']).optional() },
-  async ({ status }) => {
-    const siteId = getSiteId()
-    if (!siteId) throw new Error('No active site.')
-
-    const products = await api<any[]>(`/api/v1/shop/${siteId}/products`)
-    const filtered = status ? products.filter(p => p.status === status) : products
-
-    return { content: [{ type: 'text', text: JSON.stringify(filtered, null, 2) }] }
-  }
-)
-
-/**
- * Get a specific product
- */
-server.tool(
-  'getProduct',
-  'Get details of a specific product by its slug.',
-  { slug: z.string() },
-  async ({ slug }) => {
-    const siteId = getSiteId()
-    if (!siteId) throw new Error('No active site.')
-    const product = await api<any>(`/api/v1/shop/${siteId}/products/slug/${slug}`)
-    return { content: [{ type: 'text', text: JSON.stringify(product, null, 2) }] }
-  }
-)
-
-/**
- * Create a new product
- */
-server.tool(
-  'createProduct',
-  'Create a new product in the shop.',
-  {
-    name: z.string(),
-    slug: z.string(),
-    description: z.string(),
-    shortDescription: z.string(),
-    price: z.number(),
-    featuredImage: z.string().optional(),
-    status: z.enum(['draft', 'published']).default('published'),
-  },
-  async (data) => {
-    const siteId = getSiteId()
-    if (!siteId) throw new Error('No active site.')
-    const product = await api(`/api/v1/shop/${siteId}/products`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    })
-    return { content: [{ type: 'text', text: `✅ Product created: ${data.name}` }] }
-  }
-)
-
-/**
- * Create a new page
- */
-server.tool(
-  'createPage',
-  'Create a new page in the CMS. IMPORTANT: The slug MUST start with a slash (e.g. /my-page or /).',
-  {
-    title: z.string(),
-    slug: z.string(),
-    metaTitle: z.string().optional(),
-    metaDescription: z.string().optional(),
-  },
-  async (data) => {
-    const siteId = getSiteId()
-    if (!siteId) throw new Error('No active site.')
-    const page = await api(`/api/v1/sites/${siteId}/pages`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    })
-    return { content: [{ type: 'text', text: `✅ Page created: ${data.title}` }] }
   }
 )
 
@@ -752,29 +705,48 @@ server.resource(
       api<{ businessName: string | null; businessEmail: string | null; socialLinks: unknown }>(`/api/v1/sites/${siteId}/settings`),
     ])
 
+    const modulesList = (site.activeModules || []).map((m: any) => m.module?.name || 'unknown');
+
+    const manifestText = `
+# 🦎 Axolot CMS — Contexto Maestro del Sitio
+
+¡Bienvenido! Estás conectado al proyecto Astro bajo la infraestructura de **AxolotCMS**. Axolot es una plataforma AI-native y headless que proporciona una base de datos viva superoptimizada y un editor visual inteligente. La filosofía de desarrollo es que el código local (en el IDE/Antigravity) sigue siendo la fuente de la verdad absoluta.
+
+## Información del Sitio Activo
+- **Nombre comercial**: ${site.name}
+- **Dominio principal**: ${site.domain ?? 'No configurado'}
+- **Email del negocio**: ${settings.businessEmail ?? 'No configurado'}
+- **Plan Activo**: ${settings.businessName ? 'Personalizado/Pro/Enterprise' : 'Free'}
+
+## Módulos Activos en este Sitio
+${modulesList.length > 0 ? modulesList.map(m => `- \`${m}\``).join('\n') : 'Ninguno. Módulos disponibles: "blog", "shop", "bookings", "seo".'}
+
+## Tokens de Diseño (Paleta de Colores y Tipografía)
+\`\`\`json
+${JSON.stringify(site.designTokens ?? {}, null, 2)}
+\`\`\`
+*Pauta crítica para la IA: Utiliza SIEMPRE estos colores y fuentes CSS en los componentes locales para garantizar que coincidan exactamente con la identidad visual registrada.*
+
+---
+
+## 🚀 Flujo de Trabajo y Buenas Prácticas para la IA (Antigravity/IDE)
+
+1. **DB Viva y Optimizada**: Todo el contenido se sincroniza de forma fluida. Al escribir o modificar componentes de Astro, asegúrate de mantener el rendimiento (100 Core Web Vitals) sirviendo HTML estático y sin JavaScript innecesario en el cliente.
+2. **Editor Visual Inteligente (data-slot)**:
+   - Para permitir que el usuario edite cualquier texto, imagen, enlace o color desde la interfaz visual de Axolot, añade el atributo \`data-slot="nombre_seccion.nombre_campo"\` en el HTML (ej. \`<h2 data-slot="servicios.titulo">Nuestros Servicios</h2>\`).
+3. **Uso Consistente de Herramientas**:
+   - Llama a \`createSlot\` inmediatamente después de añadir un nuevo slot en el código Astro para registrar su clave y etiqueta en el CMS.
+   - Consulta \`getMedia\` para usar las imágenes subidas por el cliente y no inventes URLs ficticias.
+   - Utiliza \`getModuleCapabilities\` antes de construir secciones dinámicas como blogs o catálogos de productos.
+
+¡Venga! Vamos a trabajar en este proyecto de Astro con AxolotCMS porque te proporciona el ecosistema perfecto que unifica el control absoluto del código local con la flexibilidad del editor visual inteligente en la nube.
+`.trim();
+
     return {
       contents: [{
         uri: 'axolot://site/context',
         mimeType: 'text/plain',
-        text: `
-# Site Context: ${site.name}
-
-## Domain
-${site.domain ?? 'Not set'}
-
-## Business
-Name: ${settings.businessName ?? site.name}
-Email: ${settings.businessEmail ?? 'Not set'}
-
-## Design Tokens
-${JSON.stringify(site.designTokens ?? {}, null, 2)}
-
-## Active Modules
-${JSON.stringify(site.activeModules ?? [], null, 2)}
-
----
-Use the tools (getMedia, getSlots, createSlot, etc.) to interact with this site's content.
-`.trim(),
+        text: manifestText,
       }],
     }
   }
