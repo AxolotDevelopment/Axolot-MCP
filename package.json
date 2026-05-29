@@ -11,10 +11,22 @@
   },
   "homepage": "https://github.com/AxolotDevelopment/Axolot-MCP#readme",
   "type": "module",
-  "description": "MCP server exposing AxolotCMS tools to AI designers",
+  "description": "Model Context Protocol (MCP) server for Axolot CMS. Expose live visual slots, schema design tokens, media libraries, and blog modules directly to AI assistants like Cursor, Claude Desktop, and VS Code.",
   "bin": {
     "axolot-mcp": "./dist/index.js"
   },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "cursor-mcp",
+    "claude-mcp",
+    "astro-cms",
+    "visual-editor",
+    "ai-agent",
+    "developer-tools",
+    "axolot"
+  ],
   "files": [
     "dist"
   ],
